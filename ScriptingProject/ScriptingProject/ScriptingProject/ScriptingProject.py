@@ -1,5 +1,6 @@
-﻿import requests
+import requests
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 #list of crafting methods with required levels
 crafting_methods = [
@@ -67,11 +68,51 @@ def get_crafting_level(username):
 def get_unlocked_methods(crafting_level):#returns unlocked crafting methods
     return [m["name"] for m in crafting_methods if crafting_level >= m["level"]]
 
-def log_data(username, level, unlocked_methods):
+def log_data(username, level, unlocked_methods): #logs data
     with open("crafting_log.txt", "a") as log_file:
         log_file.write(f"\n[{datetime.now()}] Username: {username}, Crafting Level: {level}\n")
         for method in unlocked_methods:
             log_file.write(f" - {method}\n")
+
+def get_all_crafting_methods(user_level): #returns all unlocked crafting methods by scraping the wiki API
+    url = "https://oldschool.runescape.wiki/w/Crafting"
+    headers = {
+        "User-Agent": "osrs-crafting-calc/1.0"
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print("Failed to fetch crafting methods.")
+        return []
+
+    soup = BeautifulSoup(response.content, "html.parser")
+    tables = soup.find_all("table", class_="wikitable")
+    methods = []
+
+    for table in tables:
+        rows = table.find_all("tr")[1:]  # Skip header row
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) >= 3:  # Make sure we have enough columns (level, image, name)
+                try:
+                    level_required = int(cols[0].text.strip())
+
+                    # Correctly parse item name from the 3rd column
+                    link = cols[2].find("a")
+                    item_name = link.text.strip() if link else cols[2].text.strip()
+
+                    print(f"Got item: '{item_name}' at level {level_required}")
+
+                    if level_required <= user_level and item_name:
+                        methods.append({
+                            "name": item_name,
+                            "level": level_required
+                        })
+                except Exception as e:
+                    print("Parse error:", e)
+                    continue
+
+    return methods
 
 #main of course
 def main():
@@ -80,10 +121,12 @@ def main():
 
     if level is not None:
         print(f"\n {username.title()}'s Crafting Level: {level}")
-        unlocked = get_unlocked_methods(level)
-        print("\n Crafting Methods Unlocked:")
+
+        unlocked = get_all_crafting_methods(level)
+
+        print(f"\nCrafting Methods Unlocked ({len(unlocked)}):")
         for method in unlocked:
-            print(f" {method}")
+            print(f" - {method['name']} (Level {method['level']})")
         
         # logging
         log_data(username, level, unlocked)
@@ -92,17 +135,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    #So far, I have a function that looks up an items price based off of the osrs API, and '
-    # compareS it's price to another item
-    #This will be used to determine the profit of a crafted item in the future
-    #I also have a function that determines a users crafting level'
-    #and a function that determines which crafts the user can create at their level
-    #I found that it was too difficult to use the wiki's API for now (NOT THE OSRS API)
-    #I essentially would have had to scrape a web page using a regex command to find the xp for each item
-    #for now I hard coded the xp values for the items
-    #I'm going to change this in the future
-    #I'd also like to save some of this data to a local drive, allowing the user to have saved profiles
-    #for different users
 
     
